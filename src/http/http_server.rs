@@ -47,7 +47,8 @@ fn process_message(stream: TcpStream){
         method: HttpMethod::fromMethodString(splits[0]),
         path: String::from(splits[1]),
         headers: HashMap::new(),
-        content: None
+        content: None,
+        route_params: HashMap::new()
     };
 
     let mut content_length: Option<usize> = None;
