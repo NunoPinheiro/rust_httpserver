@@ -7,12 +7,26 @@ use std::env::var;
 //TODO what should we have here? Should http request handle a drop so we know when it goes out of context we should write the result?
 type HttpRouteHandler = dyn Fn(HttpRequest) -> ();
 
+type Routes = HashMap<String, HttpRouteNode>;
+
+trait RouteAdd{
+    fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>);
+}
+impl RouteAdd for Routes{
+    fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>){
+        let child_key = String::from(path[0]);
+        let mut child =self.entry(child_key).or_insert(HttpRouteNode::new()).borrow_mut();
+        child.on(original_path, path, handler);
+    }
+}
+
 struct HttpRouteNode{
     handler: Option<Box<HttpRouteHandler>>,
-    children: HashMap<String, HttpRouteNode>,
+    children: Routes,
     var_name: Option<String>,
     wildcard: bool
 }
+
 
 impl HttpRouteNode{
     fn new() -> HttpRouteNode{
@@ -24,28 +38,29 @@ impl HttpRouteNode{
         }
     }
 
-    pub fn on(&mut self, original_path: &String, mut path: &[&str], handler: Box<HttpRouteHandler>){
-        //TODO should fail if already has inner wildcard node
-        //TODO we should have special cases when root is wildcard or var
-        match path.len(){
-            0 => {
-                //Should register handler in current node
-                self.handler = Some(handler);
-            }
-            _ => {
-                let key = path[0];
-                if key == "*" && path.len() > 1{
-                    panic!("Last '*' for path part that is not the last: {}", original_path)
-                }
-                let mut child =self.children.entry(String::from(key)).or_insert(HttpRouteNode::new()).borrow_mut();
-                child.on(original_path, &path[1..], handler)
+    pub fn on(&mut self, original_path: &str, mut path: &[&str], handler: Box<HttpRouteHandler>){
+        let self_path_part = path[0];
+        if self_path_part.starts_with("?"){
+            self.var_name = Some(String::from(&self_path_part[1..]));
+        }
+        if self_path_part == "*"{
+            self.wildcard = true;
+            if path.len() > 1 {
+                panic!("Last '*' for path part that is not the last: {}", original_path)
             }
         }
+        if path.len() > 1 {
+            self.children.on(original_path, &path[1..], handler);
+        }
+        else{
+            self.handler = Some(handler);
+        }
     }
+
 }
 
 struct HttpRouter{
-    roots: HashMap<HttpMethod, HttpRouteNode>,
+    roots: HashMap<HttpMethod, Routes>,
     not_found_handler: Option<Box<HttpRouteHandler>>,
 }
 
@@ -54,7 +69,7 @@ impl HttpRouter{
         let mut roots = HashMap::new();
 
         for method in HttpMethod::into_enum_iter(){
-            roots.insert(method, HttpRouteNode::new());
+            roots.insert(method, HashMap::new());
         }
 
         HttpRouter{
@@ -64,35 +79,55 @@ impl HttpRouter{
     }
 
     pub fn on(&mut self, method: HttpMethod, path: String, handler: Box<HttpRouteHandler>){
+        let mut path = path.as_str();
+        if path.starts_with("/"){
+            path = &path[1..];
+        }
         let parts: Vec<&str> = path.split("/").collect();
-        self.roots.get_mut(&method).unwrap().on(&path,parts.borrow(), handler);
+        let routes = self.roots.get_mut(&method).unwrap();
+        routes.on(path,parts.borrow(), handler);
     }
 
     pub fn handle(&mut self, mut http_request: HttpRequest){
-        let mut node = self.roots.get(http_request.method.borrow()).unwrap();
-        for part in http_request.path.split("/"){
-            if let Some(inner_node) = node.children.get(part){
-                node = inner_node;
+        let mut routes = self.roots.get(http_request.method.borrow()).unwrap();
+        let mut node: Option<&HttpRouteNode> = None;
+        let mut path = http_request.path.as_str();
+        if path.starts_with("/"){
+            path = &path[1..];
+        }
+        for part in path.split("/"){
+            if let Some(inner_node) = routes.get(part){
+                node = Some(inner_node);
+                routes = &inner_node.children;
             }
-            else if let Some(inner_node) = node.children.iter().map(|x| x.1).find(|x| x.wildcard == true || x.var_name.is_some()){
+            else if let Some(inner_node) = routes.iter().map(|x| x.1).find(|x| x.wildcard == true || x.var_name.is_some()){
                 if let Some(var_name) = &inner_node.var_name{
                     http_request.route_params.insert(var_name.clone(), String::from(part));
                 }
-                node = inner_node;
+                node = Some(inner_node);
+                if inner_node.wildcard {
+                    break;
+                }
             }
             else{
-                if let Some(not_found_handler) = &self.not_found_handler{
-                    not_found_handler(http_request);
-                }
+                self.handle_not_found(http_request);
                 return;
             }
         }
 
-        if let Some(handler) = &node.handler {
-            handler(http_request)
+        match node {
+            Some(node) if node.handler.is_some() => {
+                if let Some(handler) = &node.handler {
+                    handler(http_request)
+                }
+            },
+            _ => self.handle_not_found(http_request)
         }
-        else{
-            panic!("Code shouldn't have reached this point")
+    }
+
+    pub fn handle_not_found(&self, http_request: HttpRequest){
+        if let Some(not_found_handler) = &self.not_found_handler{
+            not_found_handler(http_request);
         }
     }
 
@@ -139,6 +174,17 @@ mod tests {
         let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = true;
         router.on(HttpMethod::GET, String::from("/hello"), Box::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/hello"));
+        assert_eq!(*handler_called.borrow(), true);
+    }
+
+    #[test]
+    fn it_calls_deeper_route_handler() {
+        let mut router = HttpRouter::new();
+        let mut handler_called = Rc::new(RefCell::new(false));
+        let handler_called_copy = handler_called.clone();
+        let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = true;
+        router.on(HttpMethod::GET, String::from("/hello/world"), Box::new(on_handler));
+        router.handle(test_http_request(HttpMethod::GET, "/hello/world"));
         assert_eq!(*handler_called.borrow(), true);
     }
 
