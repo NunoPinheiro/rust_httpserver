@@ -2,7 +2,6 @@ use crate::http::{HttpRequest, HttpMethod};
 use std::collections::HashMap;
 use enum_iterator::IntoEnumIterator;
 use std::borrow::{Borrow, BorrowMut};
-use std::env::var;
 
 //TODO what should we have here? Should http request handle a drop so we know when it goes out of context we should write the result?
 type HttpRouteHandler = dyn Fn(HttpRequest) -> ();
@@ -15,7 +14,7 @@ trait RouteAdd{
 impl RouteAdd for Routes{
     fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>){
         let child_key = String::from(path[0]);
-        let mut child =self.entry(child_key).or_insert(HttpRouteNode::new()).borrow_mut();
+        let child =self.entry(child_key).or_insert(HttpRouteNode::new()).borrow_mut();
         child.on(original_path, path, handler);
     }
 }
@@ -38,7 +37,7 @@ impl HttpRouteNode{
         }
     }
 
-    pub fn on(&mut self, original_path: &str, mut path: &[&str], handler: Box<HttpRouteHandler>){
+    pub fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>){
         let self_path_part = path[0];
         if self_path_part.starts_with("?"){
             self.var_name = Some(String::from(&self_path_part[1..]));
@@ -78,8 +77,7 @@ impl HttpRouter{
         }
     }
 
-    pub fn on(&mut self, method: HttpMethod, path: String, handler: Box<HttpRouteHandler>){
-        let mut path = path.as_str();
+    pub fn on(&mut self, method: HttpMethod, mut path: &str, handler: Box<HttpRouteHandler>){
         if path.starts_with("/"){
             path = &path[1..];
         }
@@ -138,7 +136,7 @@ impl HttpRouter{
 
 #[cfg(test)]
 mod tests {
-    use crate::http::http_router::{HttpRouter, HttpRouteHandler};
+    use crate::http::http_router::HttpRouter;
     use crate::http::{HttpRequest, HttpMethod};
     use std::cell::RefCell;
     use std::rc::Rc;
@@ -157,9 +155,9 @@ mod tests {
     #[test]
     fn it_calls_not_found_handler() {
         let mut router = HttpRouter::new();
-        let mut not_found = Rc::new(RefCell::new(false));
+        let not_found = Rc::new(RefCell::new(false));
         let not_found_copy = not_found.clone();
-        let on_not_found = move |x: HttpRequest| *not_found_copy.borrow_mut() = true;
+        let on_not_found = move |_| *not_found_copy.borrow_mut() = true;
         router.on_not_found(Box::new(on_not_found));
         router.handle(test_http_request(HttpMethod::GET, "/non/existent"));
         assert_eq!(*not_found.borrow(), true);
@@ -169,10 +167,10 @@ mod tests {
     #[test]
     fn it_calls_route_handler() {
         let mut router = HttpRouter::new();
-        let mut handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Rc::new(RefCell::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, String::from("/hello"), Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
+        router.on(HttpMethod::GET, "/hello", Box::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/hello"));
         assert_eq!(*handler_called.borrow(), true);
     }
@@ -180,10 +178,10 @@ mod tests {
     #[test]
     fn it_calls_deeper_route_handler() {
         let mut router = HttpRouter::new();
-        let mut handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Rc::new(RefCell::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, String::from("/hello/world"), Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
+        router.on(HttpMethod::GET, "/hello/world", Box::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/hello/world"));
         assert_eq!(*handler_called.borrow(), true);
     }
@@ -192,10 +190,10 @@ mod tests {
     #[test]
     fn it_calls_route_handler_wild_card() {
         let mut router = HttpRouter::new();
-        let mut handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Rc::new(RefCell::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, String::from("/static/*"), Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
+        router.on(HttpMethod::GET, "/static/*", Box::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/static/path/for/file"));
         assert_eq!(*handler_called.borrow(), true);
     }
@@ -203,10 +201,10 @@ mod tests {
     #[test]
     fn it_calls_route_with_right_value() {
         let mut router = HttpRouter::new();
-        let mut handler_called_result = Rc::new(RefCell::new(String::from("false")));
+        let handler_called_result = Rc::new(RefCell::new(String::from("false")));
         let handler_called_copy = handler_called_result.clone();
         let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = String::from(x.route_params.get("key").unwrap().clone());
-        router.on(HttpMethod::GET, String::from("/with_var/?key"), Box::new(on_handler));
+        router.on(HttpMethod::GET, "/with_var/?key", Box::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/with_var/expected"));
         assert_eq!(*handler_called_result.borrow(), "expected");
     }

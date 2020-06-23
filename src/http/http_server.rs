@@ -32,7 +32,7 @@ impl<'a> HttpServer<'a>{
 fn process_message(stream: TcpStream){
     let mut stream = BufReader::new(stream);
     let mut line = String::new();
-    stream.read_line(&mut line);
+    stream.read_line(&mut line).unwrap();
 
     //println!("First line: {}", line)
     let splits: Vec<&str> = line.split(" ").collect();
@@ -44,7 +44,7 @@ fn process_message(stream: TcpStream){
     //TODO ignoring protocol version for now
 
     let mut http_request = HttpRequest{
-        method: HttpMethod::fromMethodString(splits[0]),
+        method: HttpMethod::from_method_string(splits[0]),
         path: String::from(splits[1]),
         headers: HashMap::new(),
         content: None,
@@ -55,7 +55,7 @@ fn process_message(stream: TcpStream){
     //Read headers until we find a new line
     loop {
         let mut line = String::new();
-        stream.read_line(&mut line);
+        stream.read_line(&mut line).unwrap();
 
         if line == "\r\n" {
             break;

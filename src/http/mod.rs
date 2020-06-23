@@ -26,7 +26,7 @@ struct HttpRequest{
 }
 
 impl HttpMethod{
-    fn fromMethodString(value: &str) -> HttpMethod{
+    fn from_method_string(value: &str) -> HttpMethod{
         match value{
             "GET" => HttpMethod::GET,
             "POST" => HttpMethod::POST,
