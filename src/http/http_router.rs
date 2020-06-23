@@ -4,7 +4,7 @@ use enum_iterator::IntoEnumIterator;
 use std::borrow::{Borrow, BorrowMut};
 
 //TODO what should we have here? Should http request handle a drop so we know when it goes out of context we should write the result?
-type HttpRouteHandler = dyn Fn(HttpRequest) -> ();
+pub type HttpRouteHandler = dyn Fn(HttpRequest) -> ();
 
 type Routes = HashMap<String, HttpRouteNode>;
 
@@ -58,7 +58,7 @@ impl HttpRouteNode{
 
 }
 
-struct HttpRouter{
+pub struct HttpRouter{
     roots: HashMap<HttpMethod, Routes>,
     not_found_handler: Option<Box<HttpRouteHandler>>,
 }
@@ -208,4 +208,6 @@ mod tests {
         router.handle(test_http_request(HttpMethod::GET, "/with_var/expected"));
         assert_eq!(*handler_called_result.borrow(), "expected");
     }
+
+    //TODO add test to ensure it calls the right method
 }

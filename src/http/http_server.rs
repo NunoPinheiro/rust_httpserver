@@ -3,10 +3,12 @@ use std::collections::HashMap;
 use std::io::{BufRead, Read};
 use  std::io::BufReader;
 use crate::http::{HttpRequest, HttpMethod};
+use crate::http::http_router::{HttpRouter, HttpRouteHandler};
 
 pub struct HttpServer<'a>{
     listen_addr: &'a str,
-    port: u16
+    port: u16,
+    router: HttpRouter
 }
 
 impl<'a> HttpServer<'a>{
@@ -24,9 +26,28 @@ impl<'a> HttpServer<'a>{
     pub fn new(listen_addr: &str, port: u16) -> HttpServer{
         HttpServer{
             listen_addr,
-            port
+            port,
+            router: HttpRouter::new()
         }
     }
+
+    pub fn get(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+        self.router.on(HttpMethod::GET, path, handler);
+    }
+
+    pub fn post(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+        self.router.on(HttpMethod::POST, path, handler);
+    }
+
+    pub fn put(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+        self.router.on(HttpMethod::PUT, path, handler);
+    }
+
+
+    pub fn delete(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+        self.router.on(HttpMethod::DELETE, path, handler);
+    }
+
 }
 
 fn process_message(stream: TcpStream){

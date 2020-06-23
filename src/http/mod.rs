@@ -7,7 +7,7 @@ pub mod http_router;
 
 
 #[derive(Debug, IntoEnumIterator, PartialEq, Eq, Hash)]
-enum HttpMethod{
+pub enum HttpMethod{
     GET,
     PUT,
     POST,
@@ -17,7 +17,7 @@ enum HttpMethod{
 
 
 #[derive(Debug)]
-struct HttpRequest{
+pub struct HttpRequest{
     method: HttpMethod,
     path: String,
     headers: HashMap<String, String>, //TODO ignoring multiple headers for the same string for now
