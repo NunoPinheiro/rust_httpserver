@@ -5,6 +5,6 @@ use std::sync::Arc;
 fn test(){
 
     let server =  HttpServer::new("127.0.0.1", 7878);
-    //thread::spawn(||);
-    server.listen()
+    thread::spawn(||server.listen());
+
 }

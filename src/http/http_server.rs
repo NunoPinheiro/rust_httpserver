@@ -4,6 +4,7 @@ use std::io::{BufRead, Read};
 use  std::io::BufReader;
 use crate::http::{HttpRequest, HttpMethod};
 use crate::http::http_router::{HttpRouter, HttpRouteHandler};
+use std::sync::Arc;
 
 pub struct HttpServer<'a>{
     listen_addr: &'a str,
@@ -31,20 +32,20 @@ impl<'a> HttpServer<'a>{
         }
     }
 
-    pub fn get(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+    pub fn get(&mut self, path: &str, handler: Arc<HttpRouteHandler>){
         self.router.on(HttpMethod::GET, path, handler);
     }
 
-    pub fn post(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+    pub fn post(&mut self, path: &str, handler: Arc<HttpRouteHandler>){
         self.router.on(HttpMethod::POST, path, handler);
     }
 
-    pub fn put(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+    pub fn put(&mut self, path: &str, handler: Arc<HttpRouteHandler>){
         self.router.on(HttpMethod::PUT, path, handler);
     }
 
 
-    pub fn delete(&mut self, path: &str, handler: Box<HttpRouteHandler>){
+    pub fn delete(&mut self, path: &str, handler: Arc<HttpRouteHandler>){
         self.router.on(HttpMethod::DELETE, path, handler);
     }
 

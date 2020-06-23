@@ -2,17 +2,18 @@ use crate::http::{HttpRequest, HttpMethod};
 use std::collections::HashMap;
 use enum_iterator::IntoEnumIterator;
 use std::borrow::{Borrow, BorrowMut};
+use std::sync::Arc;
 
 //TODO what should we have here? Should http request handle a drop so we know when it goes out of context we should write the result?
-pub type HttpRouteHandler = dyn Fn(HttpRequest) -> ();
+pub type HttpRouteHandler = dyn Fn(HttpRequest) -> () + Send + Sync;
 
 type Routes = HashMap<String, HttpRouteNode>;
 
 trait RouteAdd{
-    fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>);
+    fn on(&mut self, original_path: &str, path: &[&str], handler: Arc<HttpRouteHandler>);
 }
 impl RouteAdd for Routes{
-    fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>){
+    fn on(&mut self, original_path: &str, path: &[&str], handler: Arc<HttpRouteHandler>){
         let child_key = String::from(path[0]);
         let child =self.entry(child_key).or_insert(HttpRouteNode::new()).borrow_mut();
         child.on(original_path, path, handler);
@@ -20,7 +21,7 @@ impl RouteAdd for Routes{
 }
 
 struct HttpRouteNode{
-    handler: Option<Box<HttpRouteHandler>>,
+    handler: Option<Arc<HttpRouteHandler>>,
     children: Routes,
     var_name: Option<String>,
     wildcard: bool
@@ -37,7 +38,7 @@ impl HttpRouteNode{
         }
     }
 
-    pub fn on(&mut self, original_path: &str, path: &[&str], handler: Box<HttpRouteHandler>){
+    pub fn on(&mut self, original_path: &str, path: &[&str], handler: Arc<HttpRouteHandler>){
         let self_path_part = path[0];
         if self_path_part.starts_with("?"){
             self.var_name = Some(String::from(&self_path_part[1..]));
@@ -60,7 +61,7 @@ impl HttpRouteNode{
 
 pub struct HttpRouter{
     roots: HashMap<HttpMethod, Routes>,
-    not_found_handler: Option<Box<HttpRouteHandler>>,
+    not_found_handler: Option<Arc<HttpRouteHandler>>,
 }
 
 impl HttpRouter{
@@ -77,7 +78,7 @@ impl HttpRouter{
         }
     }
 
-    pub fn on(&mut self, method: HttpMethod, mut path: &str, handler: Box<HttpRouteHandler>){
+    pub fn on(&mut self, method: HttpMethod, mut path: &str, handler: Arc<HttpRouteHandler>){
         if path.starts_with("/"){
             path = &path[1..];
         }
@@ -129,7 +130,7 @@ impl HttpRouter{
         }
     }
 
-    pub fn on_not_found(&mut self, not_found_handler: Box<HttpRouteHandler>){
+    pub fn on_not_found(&mut self, not_found_handler: Arc<HttpRouteHandler>){
         self.not_found_handler = Some(not_found_handler);
     }
 }
@@ -138,9 +139,8 @@ impl HttpRouter{
 mod tests {
     use crate::http::http_router::HttpRouter;
     use crate::http::{HttpRequest, HttpMethod};
-    use std::cell::RefCell;
-    use std::rc::Rc;
     use std::collections::HashMap;
+    use std::sync::{Arc, Mutex};
 
     fn test_http_request(method: HttpMethod, path: &str) -> HttpRequest{
         HttpRequest{
@@ -155,58 +155,58 @@ mod tests {
     #[test]
     fn it_calls_not_found_handler() {
         let mut router = HttpRouter::new();
-        let not_found = Rc::new(RefCell::new(false));
+        let not_found = Arc::new(Mutex::new(false));
         let not_found_copy = not_found.clone();
-        let on_not_found = move |_| *not_found_copy.borrow_mut() = true;
-        router.on_not_found(Box::new(on_not_found));
+        let on_not_found = move |_| *not_found_copy.lock().unwrap() = true;
+        router.on_not_found(Arc::new(on_not_found));
         router.handle(test_http_request(HttpMethod::GET, "/non/existent"));
-        assert_eq!(*not_found.borrow(), true);
+        assert_eq!(*not_found.lock().unwrap(), true);
     }
 
 
     #[test]
     fn it_calls_route_handler() {
         let mut router = HttpRouter::new();
-        let handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Arc::new(Mutex::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, "/hello", Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.lock().unwrap() = true;
+        router.on(HttpMethod::GET, "/hello", Arc::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/hello"));
-        assert_eq!(*handler_called.borrow(), true);
+        assert_eq!(*handler_called.lock().unwrap(), true);
     }
 
     #[test]
     fn it_calls_deeper_route_handler() {
         let mut router = HttpRouter::new();
-        let handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Arc::new(Mutex::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, "/hello/world", Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.lock().unwrap() = true;
+        router.on(HttpMethod::GET, "/hello/world", Arc::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/hello/world"));
-        assert_eq!(*handler_called.borrow(), true);
+        assert_eq!(*handler_called.lock().unwrap(), true);
     }
 
 
     #[test]
     fn it_calls_route_handler_wild_card() {
         let mut router = HttpRouter::new();
-        let handler_called = Rc::new(RefCell::new(false));
+        let handler_called = Arc::new(Mutex::new(false));
         let handler_called_copy = handler_called.clone();
-        let on_handler = move |_| *handler_called_copy.borrow_mut() = true;
-        router.on(HttpMethod::GET, "/static/*", Box::new(on_handler));
+        let on_handler = move |_| *handler_called_copy.lock().unwrap() = true;
+        router.on(HttpMethod::GET, "/static/*", Arc::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/static/path/for/file"));
-        assert_eq!(*handler_called.borrow(), true);
+        assert_eq!(*handler_called.lock().unwrap(), true);
     }
 
     #[test]
     fn it_calls_route_with_right_value() {
         let mut router = HttpRouter::new();
-        let handler_called_result = Rc::new(RefCell::new(String::from("false")));
+        let handler_called_result = Arc::new(Mutex::new(String::from("false")));
         let handler_called_copy = handler_called_result.clone();
-        let on_handler = move |x: HttpRequest| *handler_called_copy.borrow_mut() = String::from(x.route_params.get("key").unwrap().clone());
-        router.on(HttpMethod::GET, "/with_var/?key", Box::new(on_handler));
+        let on_handler = move |x: HttpRequest| *handler_called_copy.lock().unwrap() = String::from(x.route_params.get("key").unwrap().clone());
+        router.on(HttpMethod::GET, "/with_var/?key", Arc::new(on_handler));
         router.handle(test_http_request(HttpMethod::GET, "/with_var/expected"));
-        assert_eq!(*handler_called_result.borrow(), "expected");
+        assert_eq!(*handler_called_result.lock().unwrap(), "expected");
     }
 
     //TODO add test to ensure it calls the right method
