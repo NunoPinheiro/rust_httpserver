@@ -1,10 +1,10 @@
-use web_server::http::http_server::HttpServer;
-use std::thread;
 use std::sync::Arc;
+use std::thread;
+use web_server::http::http_server::HttpServer;
 #[test]
-fn test(){
+fn test() {
+    let mut server = HttpServer::new("127.0.0.1", 7878);
 
-    let server =  HttpServer::new("127.0.0.1", 7878);
-    thread::spawn(||server.listen());
-
+    server.get("/path", |x| println!("Called"));
+    thread::spawn(|| server.listen());
 }
