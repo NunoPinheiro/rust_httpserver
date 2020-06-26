@@ -1,8 +1,8 @@
 use crate::http::http_router::HttpRouter;
-use crate::http::{HttpMethod, HttpRequest};
+use crate::http::{HttpMethod, HttpRequest, HttpResponse, HttpVersion};
 use std::collections::HashMap;
-use std::io::BufReader;
 use std::io::{BufRead, Read};
+use std::io::{BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 
@@ -14,8 +14,9 @@ pub struct HttpServer<'a> {
 
 impl<'a> HttpServer<'a> {
     pub fn listen(self) {
-        let listener = TcpListener::bind(format!("{}:{}", self.listen_addr, self.port)).unwrap();
-
+        let complete_listen_addr = format!("{}:{}", self.listen_addr, self.port);
+        let listener = TcpListener::bind(complete_listen_addr.as_str()).unwrap();
+        println!("Listening on {}", complete_listen_addr);
         for stream in listener.incoming() {
             let stream = stream.unwrap();
 
@@ -32,7 +33,7 @@ impl<'a> HttpServer<'a> {
         }
     }
 
-    pub fn get<T: Fn(HttpRequest) -> () + Send + Sync + 'static>(
+    pub fn get<T: Fn(HttpRequest) -> HttpResponse + Send + Sync + 'static>(
         &mut self,
         path: &str,
         handler: T,
@@ -40,7 +41,7 @@ impl<'a> HttpServer<'a> {
         self.router.on(HttpMethod::GET, path, Arc::new(handler));
     }
 
-    pub fn post<T: Fn(HttpRequest) -> () + Send + Sync + 'static>(
+    pub fn post<T: Fn(HttpRequest) -> HttpResponse + Send + Sync + 'static>(
         &mut self,
         path: &str,
         handler: T,
@@ -48,7 +49,7 @@ impl<'a> HttpServer<'a> {
         self.router.on(HttpMethod::POST, path, Arc::new(handler));
     }
 
-    pub fn put<T: Fn(HttpRequest) -> () + Send + Sync + 'static>(
+    pub fn put<T: Fn(HttpRequest) -> HttpResponse + Send + Sync + 'static>(
         &mut self,
         path: &str,
         handler: T,
@@ -56,7 +57,7 @@ impl<'a> HttpServer<'a> {
         self.router.on(HttpMethod::PUT, path, Arc::new(handler));
     }
 
-    pub fn delete<T: Fn(HttpRequest) -> () + Send + Sync + 'static>(
+    pub fn delete<T: Fn(HttpRequest) -> HttpResponse + Send + Sync + 'static>(
         &mut self,
         path: &str,
         handler: T,
@@ -64,10 +65,10 @@ impl<'a> HttpServer<'a> {
         self.router.on(HttpMethod::DELETE, path, Arc::new(handler));
     }
 
-    fn process_message(&self, stream: TcpStream) {
-        let mut stream = BufReader::new(stream);
+    fn process_message(&self, mut stream: TcpStream) {
+        let mut reader = BufReader::new(&stream);
         let mut line = String::new();
-        stream.read_line(&mut line).unwrap();
+        reader.read_line(&mut line).unwrap();
 
         //println!("First line: {}", line)
         let splits: Vec<&str> = line.split(" ").collect();
@@ -81,9 +82,11 @@ impl<'a> HttpServer<'a> {
 
         //TODO ignoring protocol version for now
 
+        let http_version = splits[2].trim();
         let mut http_request = HttpRequest {
             method: HttpMethod::from_method_string(splits[0]),
             path: String::from(splits[1]),
+            http_version: HttpVersion::from_str(http_version),
             headers: HashMap::new(),
             content: None,
             route_params: HashMap::new(),
@@ -93,7 +96,7 @@ impl<'a> HttpServer<'a> {
         //Read headers until we find a new line
         loop {
             let mut line = String::new();
-            stream.read_line(&mut line).unwrap();
+            reader.read_line(&mut line).unwrap();
 
             if line == "\r\n" {
                 break;
@@ -116,20 +119,39 @@ impl<'a> HttpServer<'a> {
 
         if let Some(size) = content_length {
             let mut buffer: Vec<u8> = vec![0; size];
-            stream.read_exact(buffer.as_mut_slice()).unwrap();
+            reader.read_exact(buffer.as_mut_slice()).unwrap();
             http_request.content = Some(buffer);
         }
 
         //print_request(http_request);
-        self.router.handle(http_request);
+        let response = self.router.handle(http_request);
+        let mut response_builder = String::new();
+        response_builder.push_str(
+            format!(
+                "{} {} {}\r\n",
+                http_version,
+                response.status_code.to_code(),
+                response.status_code.to_string()
+            )
+            .as_str(),
+        );
+        stream.write(response_builder.as_bytes()).unwrap();
+
+        //TODO add headers support
+        if let Some(content) = response.content.as_deref() {
+            stream
+                .write(format!("Content-Length: {}\r\n", content.len()).as_bytes())
+                .unwrap();
+        }
+        stream.write("\r\n".as_bytes()).unwrap();
+
+        if let Some(content_bytes) = response.content.as_deref() {
+            stream.write(content_bytes).unwrap();
+        }
     }
 }
 
 fn trim(original: &str) -> String {
     let end = original.len() - 2;
     String::from(&original[..end])
-}
-
-fn _print_request(http_request: HttpRequest) {
-    println!("{:?}", http_request)
 }
