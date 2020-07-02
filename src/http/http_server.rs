@@ -29,7 +29,7 @@ impl<'a> HttpServer<'a> {
         HttpServer {
             listen_addr,
             port,
-            router: HttpRouter::new(),
+            router: HttpRouter::default(),
         }
     }
 
@@ -71,7 +71,7 @@ impl<'a> HttpServer<'a> {
         reader.read_line(&mut line).unwrap();
 
         //println!("First line: {}", line)
-        let splits: Vec<&str> = line.split(" ").collect();
+        let splits: Vec<&str> = line.split(' ').collect();
         if splits.len() != 3 {
             eprintln!(
                 "First line of request had wrong splits size {}",
@@ -108,7 +108,7 @@ impl<'a> HttpServer<'a> {
                 return;
             }
             let key = String::from(splits[0]);
-            let val = String::from(trim(splits[1]));
+            let val = trim(splits[1]);
 
             if key == "Content-Length" {
                 content_length = Some(val.parse().unwrap())
@@ -135,21 +135,21 @@ impl<'a> HttpServer<'a> {
             )
             .as_str(),
         );
-        stream.write(response_builder.as_bytes()).unwrap();
+        stream.write_all(response_builder.as_bytes()).unwrap();
 
         //TODO add headers support
         for header in &response.headers{
-            stream.write(format!("{}: {}\r\n", header.0, header.1).as_bytes()).unwrap();
+            stream.write_all(format!("{}: {}\r\n", header.0, header.1).as_bytes()).unwrap();
         }
         if let Some(content) = response.content.as_deref() {
             stream
-                .write(format!("Content-Length: {}\r\n", content.len()).as_bytes())
+                .write_all(format!("Content-Length: {}\r\n", content.len()).as_bytes())
                 .unwrap();
         }
-        stream.write("\r\n".as_bytes()).unwrap();
+        stream.write_all(b"\r\n").unwrap();
 
         if let Some(content_bytes) = response.content.as_deref() {
-            stream.write(content_bytes).unwrap();
+            stream.write_all(content_bytes).unwrap();
         }
     }
 }

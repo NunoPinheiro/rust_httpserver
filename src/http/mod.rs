@@ -75,8 +75,8 @@ pub struct HttpResponse {
     pub headers: HashMap<String, String>,
 }
 
-impl HttpResponse {
-    pub fn new() -> HttpResponse {
+impl Default for HttpResponse{
+    fn default() -> Self {
         HttpResponse {
             status_code: StatusCode::_200,
             content_type: None,
@@ -84,7 +84,9 @@ impl HttpResponse {
             headers: HashMap::new()
         }
     }
+}
 
+impl HttpResponse {
     pub fn with_string_content(mut self, content: &str) -> HttpResponse {
         self.content_type = Some(HttpContentType::TEXTPLAIN);
         self.content = Some(content.as_bytes().to_vec());

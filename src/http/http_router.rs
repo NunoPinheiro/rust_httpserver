@@ -17,7 +17,7 @@ impl RouteAdd for Routes {
         let child_key = String::from(path[0]);
         let child = self
             .entry(child_key)
-            .or_insert(HttpRouteNode::new())
+            .or_insert_with(HttpRouteNode::new)
             .borrow_mut();
         child.on(original_path, path, handler);
     }
@@ -42,7 +42,7 @@ impl HttpRouteNode {
 
     pub fn on(&mut self, original_path: &str, path: &[&str], handler: Arc<HttpRouteHandler>) {
         let self_path_part = path[0];
-        if self_path_part.starts_with("?") {
+        if self_path_part.starts_with('?') {
             self.var_name = Some(String::from(&self_path_part[1..]));
         }
         if self_path_part == "*" {
@@ -66,9 +66,8 @@ pub struct HttpRouter {
     roots: HashMap<HttpMethod, Routes>,
     not_found_handler: Option<Arc<HttpRouteHandler>>,
 }
-
-impl HttpRouter {
-    pub fn new() -> HttpRouter {
+impl Default for HttpRouter{
+    fn default() -> Self {
         let mut roots = HashMap::new();
 
         for method in HttpMethod::into_enum_iter() {
@@ -80,12 +79,14 @@ impl HttpRouter {
             not_found_handler: None,
         }
     }
+}
 
+impl HttpRouter {
     pub fn on(&mut self, method: HttpMethod, mut path: &str, handler: Arc<HttpRouteHandler>) {
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             path = &path[1..];
         }
-        let parts: Vec<&str> = path.split("/").collect();
+        let parts: Vec<&str> = path.split('/').collect();
         let routes = self.roots.get_mut(&method).unwrap();
         routes.on(path, parts.borrow(), handler);
     }
@@ -94,17 +95,17 @@ impl HttpRouter {
         let mut routes = self.roots.get(http_request.method.borrow()).unwrap();
         let mut node: Option<&HttpRouteNode> = None;
         let mut path = http_request.path.as_str();
-        if path.starts_with("/") {
+        if path.starts_with('/') {
             path = &path[1..];
         }
-        for part in path.split("/") {
+        for part in path.split('/') {
             if let Some(inner_node) = routes.get(part) {
                 node = Some(inner_node);
                 routes = &inner_node.children;
             } else if let Some(inner_node) = routes
                 .iter()
                 .map(|x| x.1)
-                .find(|x| x.wildcard == true || x.var_name.is_some())
+                .find(|x| x.wildcard || x.var_name.is_some())
             {
                 if let Some(var_name) = &inner_node.var_name {
                     http_request
@@ -130,7 +131,7 @@ impl HttpRouter {
         if let Some(not_found_handler) = &self.not_found_handler {
             not_found_handler(http_request)
         } else {
-            HttpResponse::new().not_found()
+            HttpResponse::default().not_found()
         }
     }
 
@@ -159,9 +160,9 @@ mod tests {
 
     #[test]
     fn it_calls_not_found_handler() {
-        let mut router = HttpRouter::new();
+        let mut router = HttpRouter::default();
         let on_not_found = |_| {
-            HttpResponse::new()
+            HttpResponse::default()
                 .with_string_content("Not Found!")
                 .not_found()
         };
@@ -172,15 +173,15 @@ mod tests {
 
     #[test]
     fn it_calls_default_not_found_handler() {
-        let router = HttpRouter::new();
+        let router = HttpRouter::default();
         let response = router.handle(test_http_request(HttpMethod::GET, "/non/existent"));
         assert_eq!(response.status_code, StatusCode::_404);
     }
 
     #[test]
     fn it_calls_route_handler() {
-        let mut router = HttpRouter::new();
-        let on_handler = |_| HttpResponse::new().with_string_content("Called!");
+        let mut router = HttpRouter::default();
+        let on_handler = |_| HttpResponse::default().with_string_content("Called!");
         router.on(HttpMethod::GET, "/hello", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/hello"));
         assert_eq!(response.content_as_string(), "Called!");
@@ -188,8 +189,8 @@ mod tests {
 
     #[test]
     fn it_calls_deeper_route_handler() {
-        let mut router = HttpRouter::new();
-        let on_handler = |_| HttpResponse::new().with_string_content("Called!");
+        let mut router = HttpRouter::default();
+        let on_handler = |_| HttpResponse::default().with_string_content("Called!");
         router.on(HttpMethod::GET, "/hello/world", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/hello/world"));
         assert_eq!(response.content_as_string(), "Called!");
@@ -197,8 +198,8 @@ mod tests {
 
     #[test]
     fn it_calls_route_handler_wild_card() {
-        let mut router = HttpRouter::new();
-        let on_handler = |x: HttpRequest| HttpResponse::new().with_string_content(x.path.as_str());
+        let mut router = HttpRouter::default();
+        let on_handler = |x: HttpRequest| HttpResponse::default().with_string_content(x.path.as_str());
         router.on(HttpMethod::GET, "/static/*", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/static/path/for/file"));
         assert_eq!(response.content_as_string(), "/static/path/for/file");
@@ -206,9 +207,9 @@ mod tests {
 
     #[test]
     fn it_calls_route_with_right_value() {
-        let mut router = HttpRouter::new();
+        let mut router = HttpRouter::default();
         let on_handler = |x: HttpRequest| {
-            HttpResponse::new().with_string_content(x.route_params.get("key").unwrap())
+            HttpResponse::default().with_string_content(x.route_params.get("key").unwrap())
         };
         router.on(HttpMethod::GET, "/with_var/?key", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/with_var/expected"));
@@ -217,8 +218,8 @@ mod tests {
 
     #[test]
     fn it_calls_route_handler_for_root() {
-        let mut router = HttpRouter::new();
-        let on_handler = |_| HttpResponse::new().with_string_content("Called for root!");
+        let mut router = HttpRouter::default();
+        let on_handler = |_| HttpResponse::default().with_string_content("Called for root!");
         router.on(HttpMethod::GET, "/", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/"));
         assert_eq!(response.status_code, StatusCode::_200);
@@ -227,8 +228,8 @@ mod tests {
 
     #[test]
     fn it_calls_route_for_right_method() {
-        let mut router = HttpRouter::new();
-        let on_handler = |_| HttpResponse::new().with_string_content("Called!");
+        let mut router = HttpRouter::default();
+        let on_handler = |_| HttpResponse::default().with_string_content("Called!");
         router.on(HttpMethod::POST, "/path", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/path"));
         assert_eq!(response.status_code, StatusCode::_404);
