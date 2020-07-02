@@ -214,6 +214,26 @@ mod tests {
         let response = router.handle(test_http_request(HttpMethod::GET, "/with_var/expected"));
         assert_eq!(response.content_as_string(), "expected");
     }
-    //TODO add test to ensure it calls using the right http method
-    //TODO add test to ensure it supports root handling: "/"
+
+    #[test]
+    fn it_calls_route_handler_for_root() {
+        let mut router = HttpRouter::new();
+        let on_handler = |_| HttpResponse::new().with_string_content("Called for root!");
+        router.on(HttpMethod::GET, "/", Arc::new(on_handler));
+        let response = router.handle(test_http_request(HttpMethod::GET, "/"));
+        assert_eq!(response.status_code, StatusCode::_200);
+        assert_eq!(response.content_as_string(), "Called for root!");
+    }
+
+    #[test]
+    fn it_calls_route_for_right_method() {
+        let mut router = HttpRouter::new();
+        let on_handler = |_| HttpResponse::new().with_string_content("Called!");
+        router.on(HttpMethod::POST, "/path", Arc::new(on_handler));
+        let response = router.handle(test_http_request(HttpMethod::GET, "/path"));
+        assert_eq!(response.status_code, StatusCode::_404);
+
+        let response = router.handle(test_http_request(HttpMethod::POST, "/path"));
+        assert_eq!(response.status_code, StatusCode::_200);
+    }
 }

@@ -9,6 +9,8 @@ Learning rust while implementing a simple http server/framework.
   - Try launching thread per request
   - Try using thread pool workers
   - Try async support
+- Implement and test proper keep alive logic
+- Implement and test proper shutdown logic
 - Benchmark
 - Support for static files serving
 - Support for template rendering
