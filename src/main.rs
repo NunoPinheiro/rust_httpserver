@@ -12,7 +12,9 @@ fn main() {
         let param = x.route_params.get("param").unwrap();
         let content = format!("Called with param: {}\n", param);
         let header_val = String::from("my val");
-        HttpResponse::default().with_string_content(content.as_str()).with_header(String::from("Test"), header_val)
+        HttpResponse::default()
+            .with_string_content(content.as_str())
+            .with_header(String::from("Test"), header_val)
     });
     server.listen()
 }

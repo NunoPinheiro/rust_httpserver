@@ -66,7 +66,7 @@ pub struct HttpRouter {
     roots: HashMap<HttpMethod, Routes>,
     not_found_handler: Option<Arc<HttpRouteHandler>>,
 }
-impl Default for HttpRouter{
+impl Default for HttpRouter {
     fn default() -> Self {
         let mut roots = HashMap::new();
 
@@ -199,7 +199,8 @@ mod tests {
     #[test]
     fn it_calls_route_handler_wild_card() {
         let mut router = HttpRouter::default();
-        let on_handler = |x: HttpRequest| HttpResponse::default().with_string_content(x.path.as_str());
+        let on_handler =
+            |x: HttpRequest| HttpResponse::default().with_string_content(x.path.as_str());
         router.on(HttpMethod::GET, "/static/*", Arc::new(on_handler));
         let response = router.handle(test_http_request(HttpMethod::GET, "/static/path/for/file"));
         assert_eq!(response.content_as_string(), "/static/path/for/file");
