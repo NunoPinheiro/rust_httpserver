@@ -12,6 +12,8 @@ Learning rust while implementing a simple http server/framework.
 - Benchmark
 - Support for static files serving
 - Support for template rendering
+- Better support for content types + encodings
+- Json support/ Check json frameworks
  
 ## Not planned to suppport:
 - TLS termination

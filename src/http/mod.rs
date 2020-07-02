@@ -1,5 +1,6 @@
 use enum_iterator::IntoEnumIterator;
 use std::collections::HashMap;
+use crate::http::HttpContentType::TEXTPLAIN;
 
 pub mod http_router;
 pub mod http_server;
@@ -15,6 +16,14 @@ pub enum HttpMethod {
 
 pub enum HttpContentType {
     TEXTPLAIN,
+}
+
+impl HttpContentType{
+    fn to_string_with_encoding(&self) -> &str{
+        match self{
+            TEXTPLAIN => "text/plain; charset=utf-8"
+        }
+    }
 }
 
 pub enum HttpVersion {
@@ -63,6 +72,7 @@ pub struct HttpResponse {
     pub status_code: StatusCode,
     pub content_type: Option<HttpContentType>,
     pub content: Option<Vec<u8>>,
+    pub headers: HashMap<String, String>,
 }
 
 impl HttpResponse {
@@ -71,13 +81,14 @@ impl HttpResponse {
             status_code: StatusCode::_200,
             content_type: None,
             content: None,
+            headers: HashMap::new()
         }
     }
 
     pub fn with_string_content(mut self, content: &str) -> HttpResponse {
         self.content_type = Some(HttpContentType::TEXTPLAIN);
         self.content = Some(content.as_bytes().to_vec());
-        self
+        self.with_header(String::from("Content-Type"), String::from(HttpContentType::TEXTPLAIN.to_string_with_encoding()))
     }
 
     pub fn ok(mut self) -> HttpResponse {
@@ -93,6 +104,14 @@ impl HttpResponse {
     //Explicitly convert the data so we don't need to re-allocate memory
     pub fn content_as_string(self) -> String {
         String::from_utf8(self.content.unwrap()).unwrap()
+    }
+
+    pub fn with_header(mut self, header_key: String, header_val: String) -> HttpResponse {
+        if header_key == "Content-Length"{
+            panic!("Unable to set custom Content Length");
+        }
+        self.headers.insert(header_key, header_val);
+        self
     }
 }
 

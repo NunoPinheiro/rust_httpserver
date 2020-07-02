@@ -138,6 +138,9 @@ impl<'a> HttpServer<'a> {
         stream.write(response_builder.as_bytes()).unwrap();
 
         //TODO add headers support
+        for header in &response.headers{
+            stream.write(format!("{}: {}\r\n", header.0, header.1).as_bytes()).unwrap();
+        }
         if let Some(content) = response.content.as_deref() {
             stream
                 .write(format!("Content-Length: {}\r\n", content.len()).as_bytes())
