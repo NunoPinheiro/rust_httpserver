@@ -1,20 +1,20 @@
 use crate::http::http_router::HttpRouter;
 use crate::http::{HttpMethod, HttpRequest, HttpResponse, HttpVersion};
+use crossbeam::channel::unbounded;
+use crossbeam::channel::Sender;
 use std::collections::HashMap;
 use std::io::{BufRead, Read};
 use std::io::{BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
-use crossbeam::channel::unbounded;
-use crossbeam::channel::Sender;
 use std::time::Duration;
 
-pub struct HttpServer{
+pub struct HttpServer {
     listen_addr: &'static str,
     port: u16,
     router: HttpRouter,
-    threads_count: u8
+    threads_count: u8,
 }
 
 impl HttpServer {
@@ -25,25 +25,24 @@ impl HttpServer {
         let sender: Sender<TcpStream> = HttpServer::launch_threads(self_ref);
         println!("Listening on {}", complete_listen_addr);
         for stream in listener.incoming() {
-            match stream{
+            match stream {
                 Ok(unwrapped_stream) => sender.send(unwrapped_stream).unwrap(),
-                Err(_) => eprintln!("Error opening new connection")
+                Err(_) => eprintln!("Error opening new connection"),
             };
         }
     }
 
-    fn launch_threads(self_ref: Arc<HttpServer>) -> Sender<TcpStream>{
+    fn launch_threads(self_ref: Arc<HttpServer>) -> Sender<TcpStream> {
         let (s, r) = unbounded();
 
-        for _ in 0..self_ref.threads_count{
+        for _ in 0..self_ref.threads_count {
             let local_ref = self_ref.clone();
             let r = r.clone();
             thread::spawn(move || {
                 //println!("Connection established!");
-                loop{
-                    match r.recv_timeout(Duration::from_secs(60 * 60 * 24)){
-                        Ok(stream) => local_ref.process_message(stream),
-                        _ => ()
+                loop {
+                    if let Ok(stream) = r.recv_timeout(Duration::from_secs(60 * 60 * 24)) {
+                        local_ref.process_message(stream)
                     }
                 }
             });
@@ -56,7 +55,7 @@ impl HttpServer {
             listen_addr,
             port,
             router: HttpRouter::default(),
-            threads_count
+            threads_count,
         }
     }
 
@@ -92,7 +91,7 @@ impl HttpServer {
         self.router.on(HttpMethod::DELETE, path, Arc::new(handler));
     }
 
-    fn process_message(& self, mut stream: TcpStream) {
+    fn process_message(&self, mut stream: TcpStream) {
         let mut reader = BufReader::new(&stream);
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
