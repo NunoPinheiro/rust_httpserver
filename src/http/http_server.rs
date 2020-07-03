@@ -5,27 +5,30 @@ use std::io::{BufRead, Read};
 use std::io::{BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
+use std::thread;
 
-pub struct HttpServer<'a> {
-    listen_addr: &'a str,
+pub struct HttpServer{
+    listen_addr: &'static str,
     port: u16,
     router: HttpRouter,
 }
 
-impl<'a> HttpServer<'a> {
+impl HttpServer {
     pub fn listen(self) {
         let complete_listen_addr = format!("{}:{}", self.listen_addr, self.port);
         let listener = TcpListener::bind(complete_listen_addr.as_str()).unwrap();
+        let self_ref = Arc::new(self);
         println!("Listening on {}", complete_listen_addr);
         for stream in listener.incoming() {
-            let stream = stream.unwrap();
-
-            println!("Connection established!");
-            self.process_message(stream);
+            let local_ref = self_ref.clone();
+            thread::spawn(move || {
+                //println!("Connection established!");
+                local_ref.process_message(stream.unwrap());
+            });
         }
     }
 
-    pub fn new(listen_addr: &str, port: u16) -> HttpServer {
+    pub fn new(listen_addr: &'static str, port: u16) -> HttpServer {
         HttpServer {
             listen_addr,
             port,
@@ -65,7 +68,7 @@ impl<'a> HttpServer<'a> {
         self.router.on(HttpMethod::DELETE, path, Arc::new(handler));
     }
 
-    fn process_message(&self, mut stream: TcpStream) {
+    fn process_message(& self, mut stream: TcpStream) {
         let mut reader = BufReader::new(&stream);
         let mut line = String::new();
         reader.read_line(&mut line).unwrap();
@@ -123,7 +126,6 @@ impl<'a> HttpServer<'a> {
             http_request.content = Some(buffer);
         }
 
-        //print_request(http_request);
         let response = self.router.handle(http_request);
         let mut response_builder = String::new();
         response_builder.push_str(
@@ -137,7 +139,6 @@ impl<'a> HttpServer<'a> {
         );
         stream.write_all(response_builder.as_bytes()).unwrap();
 
-        //TODO add headers support
         for header in &response.headers {
             stream
                 .write_all(format!("{}: {}\r\n", header.0, header.1).as_bytes())
