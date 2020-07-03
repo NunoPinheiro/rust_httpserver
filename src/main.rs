@@ -2,7 +2,7 @@ use web_server::http::http_server::HttpServer;
 use web_server::http::HttpResponse;
 
 fn main() {
-    let mut server = HttpServer::new("127.0.0.1", 7878);
+    let mut server = HttpServer::new("127.0.0.1", 7878, 16);
 
     server.get("/ola", |_| {
         HttpResponse::default().with_string_content("Olá Malin!")

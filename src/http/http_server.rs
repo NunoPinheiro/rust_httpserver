@@ -6,11 +6,15 @@ use std::io::{BufReader, Write};
 use std::net::{TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
+use crossbeam::channel::unbounded;
+use crossbeam::channel::Sender;
+use std::time::Duration;
 
 pub struct HttpServer{
     listen_addr: &'static str,
     port: u16,
     router: HttpRouter,
+    threads_count: u8
 }
 
 impl HttpServer {
@@ -18,21 +22,41 @@ impl HttpServer {
         let complete_listen_addr = format!("{}:{}", self.listen_addr, self.port);
         let listener = TcpListener::bind(complete_listen_addr.as_str()).unwrap();
         let self_ref = Arc::new(self);
+        let sender: Sender<TcpStream> = HttpServer::launch_threads(self_ref);
         println!("Listening on {}", complete_listen_addr);
         for stream in listener.incoming() {
-            let local_ref = self_ref.clone();
-            thread::spawn(move || {
-                //println!("Connection established!");
-                local_ref.process_message(stream.unwrap());
-            });
+            match stream{
+                Ok(unwrapped_stream) => sender.send(unwrapped_stream).unwrap(),
+                Err(_) => eprintln!("Error opening new connection")
+            };
         }
     }
 
-    pub fn new(listen_addr: &'static str, port: u16) -> HttpServer {
+    fn launch_threads(self_ref: Arc<HttpServer>) -> Sender<TcpStream>{
+        let (s, r) = unbounded();
+
+        for _ in 0..self_ref.threads_count{
+            let local_ref = self_ref.clone();
+            let r = r.clone();
+            thread::spawn(move || {
+                //println!("Connection established!");
+                loop{
+                    match r.recv_timeout(Duration::from_secs(60 * 60 * 24)){
+                        Ok(stream) => local_ref.process_message(stream),
+                        _ => ()
+                    }
+                }
+            });
+        }
+        s
+    }
+
+    pub fn new(listen_addr: &'static str, port: u16, threads_count: u8) -> HttpServer {
         HttpServer {
             listen_addr,
             port,
             router: HttpRouter::default(),
+            threads_count
         }
     }
 
