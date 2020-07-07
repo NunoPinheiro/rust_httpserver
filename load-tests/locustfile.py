@@ -1,12 +1,13 @@
 import random
-from locust import HttpUser, task, between
+from locust import task, between
+from locust.contrib.fasthttp import FastHttpUser
 
-class QuickstartUser(HttpUser):
-    wait_time = between(5, 9)
+class QuickstartUser(FastHttpUser):
+    wait_time = between(0, 1)
 
     @task
     def index_page(self):
-        self.client.get("/ola")
+        self.client.get("/")
 
     def on_start(self):
-        self.client.get("/ola")
+        self.client.get("/")
