@@ -23,5 +23,7 @@ fn main() {
 
     server.serve_files("static", "static");
 
+    server.setup_signal_handlers();
+
     server.listen()
 }

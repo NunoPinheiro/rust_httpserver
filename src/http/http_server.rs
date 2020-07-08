@@ -4,9 +4,12 @@ use crate::http::{HttpMethod, HttpRequest, HttpResponse, HttpVersion};
 use crossbeam::channel::unbounded;
 use crossbeam::channel::Sender;
 use std::collections::HashMap;
+use std::io;
 use std::io::{BufRead, Read};
 use std::io::{BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -16,21 +19,45 @@ pub struct HttpServer {
     port: u16,
     router: HttpRouter,
     threads_count: u8,
+    pub should_turn_off: Arc<AtomicBool>,
 }
 
 impl HttpServer {
     pub fn listen(self) {
         let complete_listen_addr = format!("{}:{}", self.listen_addr, self.port);
         let listener = TcpListener::bind(complete_listen_addr.as_str()).unwrap();
-        let self_ref = Arc::new(self);
-        let sender: Sender<TcpStream> = HttpServer::launch_threads(self_ref);
+
+        let should_turn_off = self.should_turn_off.clone();
+        let sender: Sender<TcpStream> = HttpServer::launch_threads(Arc::new(self));
         println!("Listening on {}", complete_listen_addr);
+        listener.set_nonblocking(true).unwrap();
         for stream in listener.incoming() {
             match stream {
                 Ok(unwrapped_stream) => sender.send(unwrapped_stream).unwrap(),
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5))
+                }
                 Err(_) => eprintln!("Error opening new connection"),
             };
+
+            if should_turn_off.load(Relaxed) {
+                println!("Server shutting down");
+                break;
+            }
         }
+    }
+
+    pub fn setup_signal_handlers(&self) {
+        let should_turn_off = self.should_turn_off.clone();
+        ctrlc::set_handler(move || {
+            println!("Shutting down server due to external signal");
+            HttpServer::close(should_turn_off.clone());
+        })
+        .unwrap();
+    }
+
+    pub fn close(should_turn_off: Arc<AtomicBool>) {
+        should_turn_off.store(true, Relaxed)
     }
 
     fn launch_threads(self_ref: Arc<HttpServer>) -> Sender<TcpStream> {
@@ -57,6 +84,7 @@ impl HttpServer {
             port,
             router: HttpRouter::default(),
             threads_count,
+            should_turn_off: Arc::new(AtomicBool::new(false)),
         }
     }
 
