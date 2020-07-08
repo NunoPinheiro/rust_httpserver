@@ -96,7 +96,7 @@ impl HttpServer {
         let (append, base_path) = match path {
             path if path.ends_with("/*") => ("", &path[..path.len() - 2]),
             path if path.ends_with('/') => ("", &path[..path.len() - 1]),
-            _ => ("/*", path)
+            _ => ("/*", path),
         };
 
         let path = format!("{}{}", path, append);

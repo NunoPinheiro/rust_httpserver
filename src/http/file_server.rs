@@ -10,8 +10,8 @@ pub struct FileServer {
 //TODO add templating support
 impl FileServer {
     pub fn new(base_path: String, base_folder: String) -> Self {
-        let base_path = if !base_path.starts_with('/'){
-            format!{"/{}", base_path}
+        let base_path = if !base_path.starts_with('/') {
+            format! {"/{}", base_path}
         } else {
             base_path
         };
@@ -24,7 +24,10 @@ impl FileServer {
     pub fn handle(&self, request: HttpRequest) -> HttpResponse {
         let sub_path = &request.path[self.base_path.len()..];
         let file_system_path = format!("{}/{}", self.base_folder, sub_path);
-        println!("base: {}, called: {}, part: {}", self.base_path, request.path, sub_path);
+        println!(
+            "base: {}, called: {}, part: {}",
+            self.base_path, request.path, sub_path
+        );
         match fs::read(file_system_path) {
             //TODO how should we handle the content type? Based on file extension with possibility of custom function/hardcoded value?
             //TODO copying the file into memory and further to the buffer might not be the best option
