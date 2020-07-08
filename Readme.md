@@ -17,6 +17,7 @@ Learning rust while implementing a simple http server/framework.
 - Better support for content types + encodings
 - Json support/ Check json frameworks
 - Rate limit amount of open sockets/in-flight requests
+- Expose metrics + Logs
  
 ## Not planned to suppport:
 - TLS termination

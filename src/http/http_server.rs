@@ -1,3 +1,4 @@
+use crate::http::file_server::FileServer;
 use crate::http::http_router::HttpRouter;
 use crate::http::{HttpMethod, HttpRequest, HttpResponse, HttpVersion};
 use crossbeam::channel::unbounded;
@@ -5,7 +6,7 @@ use crossbeam::channel::Sender;
 use std::collections::HashMap;
 use std::io::{BufRead, Read};
 use std::io::{BufReader, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
@@ -91,6 +92,20 @@ impl HttpServer {
         self.router.on(HttpMethod::DELETE, path, Arc::new(handler));
     }
 
+    pub fn serve_files(&mut self, path: &str, base_folder: &str) {
+        let (append, base_path) = match path {
+            path if path.ends_with("/*") => ("", &path[..path.len() - 2]),
+            path if path.ends_with('/') => ("", &path[..path.len() - 1]),
+            _ => ("/*", path)
+        };
+
+        let path = format!("{}{}", path, append);
+        let file_server = FileServer::new(String::from(base_path), String::from(base_folder));
+        let handler = move |request| file_server.handle(request);
+        self.router
+            .on(HttpMethod::GET, path.as_str(), Arc::new(handler));
+    }
+
     fn process_message(&self, mut stream: TcpStream) {
         let mut reader = BufReader::new(&stream);
         let mut line = String::new();
@@ -103,6 +118,7 @@ impl HttpServer {
                 "First line of request had wrong splits size {}",
                 splits.len()
             );
+
             return;
         }
 
@@ -177,6 +193,7 @@ impl HttpServer {
         if let Some(content_bytes) = response.content.as_deref() {
             stream.write_all(content_bytes).unwrap();
         }
+        stream.shutdown(Shutdown::Both).unwrap();
     }
 }
 

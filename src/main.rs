@@ -20,5 +20,8 @@ fn main() {
             .with_string_content(content.as_str())
             .with_header(String::from("Test"), header_val)
     });
+
+    server.serve_files("static", "static");
+
     server.listen()
 }

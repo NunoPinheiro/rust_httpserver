@@ -2,6 +2,7 @@ use crate::http::HttpContentType::TEXTPLAIN;
 use enum_iterator::IntoEnumIterator;
 use std::collections::HashMap;
 
+pub mod file_server;
 pub mod http_router;
 pub mod http_server;
 
@@ -96,6 +97,12 @@ impl HttpResponse {
         )
     }
 
+    pub fn with_byte_content(mut self, content: Vec<u8>, content_type: HttpContentType) -> Self {
+        self.content = Some(content);
+        self.content_type = Some(content_type);
+        self
+    }
+
     pub fn ok(mut self) -> HttpResponse {
         self.status_code = StatusCode::_200;
         self
@@ -127,6 +134,19 @@ pub struct HttpRequest {
     pub headers: HashMap<String, String>, //TODO ignoring multiple headers for the same string for now
     pub content: Option<Vec<u8>>,
     pub route_params: HashMap<String, String>, //route_params are added by the router to the request
+}
+
+impl HttpRequest {
+    pub fn new(method: HttpMethod, path: String) -> Self {
+        HttpRequest {
+            method,
+            path,
+            http_version: HttpVersion::_1_1,
+            headers: HashMap::new(),
+            content: None,
+            route_params: HashMap::new(),
+        }
+    }
 }
 
 impl HttpMethod {
